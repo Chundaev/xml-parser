@@ -8,7 +8,8 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    const offers = result.offers.offer
+    const offers = result.offers ? result.offers.offer || [] : [];
+    const parsedOffers = offers
       .map(offer => ({
         id: offer['$']['internal-id'] || 'N/A',
         price: parseFloat(offer.price?.[0]?.value?.[0]) || 0,
@@ -27,7 +28,7 @@ module.exports = async (req, res) => {
         offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
         offer.rooms >= parseInt(minRooms) && offer.rooms <= parseInt(maxRooms)
       );
-    res.status(200).json(offers);
+    res.status(200).json(parsedOffers);
   } catch (error) {
     res.status(500).json({ error: 'Ошибка обработки XML: ' + error.message });
   }
