@@ -30,39 +30,54 @@ module.exports = async (req, res) => {
 
     const parsedOffers = allOffers
       .map(offer => {
-        const getValue = (tag) => offer[tag]?.[0] || 'N/A';
-        const getNestedValue = (parent, child) => parseFloat(offer[parent]?.[0]?.[child]?.[0]) || 0;
-        const getAttr = (attr) => offer['$'] ? offer['$'][attr] || 'N/A' : 'N/A';
-
-        let description = getValue('description');
+        // Парсинг прямых тегов
+        const rooms = parseInt(offer.rooms?.[0] || 0);
+        const floor = parseInt(offer.floor?.[0] || 0);
+        const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
+        const builtYear = offer['built-year']?.[0] || 'N/A';
+        let description = offer.description?.[0] || '';
         description = description.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim();
 
-        // Обработка image с атрибутом tag="plan"
+        // Парсинг вложенных тегов
+        const priceValue = offer.price?.[0]?.value?.[0] || 0;
+        const areaValue = offer.area?.[0]?.value?.[0] || 0;
+        const livingSpaceValue = offer['living-space']?.[0]?.value?.[0] || 0;
+        const kitchenSpaceValue = offer['kitchen-space']?.[0]?.value?.[0] || 0;
+
+        // Парсинг image с атрибутом
         let image = '';
         const imageTag = offer.image?.[0];
         if (imageTag) {
-          image = imageTag._ || imageTag; // _ для текста внутри тега
+          image = imageTag._ || imageTag; // Текст внутри тега или сам тег
         }
 
+        const id = offer['$']['internal-id'] || 'N/A';
+
+        console.log('Пример парсинга для offer:', id, 'rooms:', rooms, 'price:', priceValue, 'area:', areaValue); // Для отладки
+
         return {
-          id: getAttr('internal-id'),
-          price: getNestedValue('price', 'value'),
-          area: getNestedValue('area', 'value'),
-          rooms: parseInt(getValue('rooms')) || 0,
-          floor: parseInt(getValue('floor')) || 0,
-          floorsTotal: parseInt(getValue('floors-total')) || 0,
-          livingSpace: getNestedValue('living-space', 'value'),
-          kitchenSpace: getNestedValue('kitchen-space', 'value'),
-          builtYear: getValue('built-year'),
+          id: id,
+          price: parseFloat(priceValue),
+          area: parseFloat(areaValue),
+          rooms: rooms,
+          floor: floor,
+          floorsTotal: floorsTotal,
+          livingSpace: parseFloat(livingSpaceValue),
+          kitchenSpace: parseFloat(kitchenSpaceValue),
+          builtYear: builtYear,
           description: description,
           image: image
         };
       })
-      .filter(offer =>
-        offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
-        offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
-        offer.rooms >= parseInt(minRooms) && offer.rooms <= parseInt(maxRooms)
-      );
+      .filter(offer => {
+        const validOffer = offer.price > 0 && offer.area > 0 && offer.rooms >= 0;
+        if (!validOffer) console.log('Отфильтрован offer с нулевыми значениями:', offer.id);
+        return validOffer &&
+          offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
+          offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
+          offer.rooms >= parseInt(minRooms) && offer.rooms <= parseInt(maxRooms);
+      });
+    console.log('После фильтрации:', parsedOffers.length);
     res.status(200).json(parsedOffers);
   } catch (error) {
     console.error('Ошибка в API:', error);
