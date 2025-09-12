@@ -5,10 +5,16 @@ module.exports = async (req, res) => {
   try {
     const { minPrice = 0, maxPrice = Infinity, minArea = 0, maxArea = Infinity, minRooms = 0, maxRooms = Infinity } = req.query;
     const response = await fetch('https://partner.unistroyrf.ru/erz/unistroyYandexNedvijMakhachkala.xml');
+    if (!response.ok) {
+      return res.status(500).json({ error: 'Не удалось загрузить XML-фид: ' + response.status });
+    }
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    const offers = result.offers ? result.offers.offer || [] : [];
+    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]); // Для отладки в логах
+    const rootKey = Object.keys(result)[0]; // Например, 'offers' или 'realty-feed'
+    const offers = result[rootKey]?.offer || result.offers?.offer || [];
+    console.log('Найдено offer:', offers.length); // Для отладки
     const parsedOffers = offers
       .map(offer => ({
         id: offer['$']['internal-id'] || 'N/A',
@@ -30,6 +36,7 @@ module.exports = async (req, res) => {
       );
     res.status(200).json(parsedOffers);
   } catch (error) {
+    console.error('Ошибка в API:', error); // Для логов Vercel
     res.status(500).json({ error: 'Ошибка обработки XML: ' + error.message });
   }
 };
