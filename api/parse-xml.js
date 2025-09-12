@@ -11,11 +11,14 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]); // Для отладки в логах
-    const rootKey = Object.keys(result)[0]; // Например, 'offers' или 'realty-feed'
-    const offers = result[rootKey]?.offer || result.offers?.offer || [];
-    console.log('Найдено offer:', offers.length); // Для отладки
-    const parsedOffers = offers
+    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]); // Для отладки
+    
+    // Динамический поиск offer в любом корневом элементе
+    const rootKey = Object.keys(result)[0];
+    const allOffers = result[rootKey]?.offer || [];
+    console.log('Найдено offer:', allOffers.length); // Для отладки
+    
+    const parsedOffers = allOffers
       .map(offer => ({
         id: offer['$']['internal-id'] || 'N/A',
         price: parseFloat(offer.price?.[0]?.value?.[0]) || 0,
