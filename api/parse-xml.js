@@ -37,6 +37,13 @@ module.exports = async (req, res) => {
         let description = getValue('description');
         description = description.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim();
 
+        // Обработка image с атрибутом tag="plan"
+        let image = '';
+        const imageTag = offer.image?.[0];
+        if (imageTag) {
+          image = imageTag._ || imageTag; // _ для текста внутри тега
+        }
+
         return {
           id: getAttr('internal-id'),
           price: getNestedValue('price', 'value'),
@@ -48,7 +55,7 @@ module.exports = async (req, res) => {
           kitchenSpace: getNestedValue('kitchen-space', 'value'),
           builtYear: getValue('built-year'),
           description: description,
-          image: getValue('image') ? getValue('image')._ || getValue('image') : ''
+          image: image
         };
       })
       .filter(offer =>
