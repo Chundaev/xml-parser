@@ -24,25 +24,33 @@ module.exports = async (req, res) => {
     const result = await parser.parseStringPromise(xmlText);
     console.log('Корневой элемент:', Object.keys(result)[0]);
 
-    // Динамический поиск offer в корневом элементе
     const rootKey = Object.keys(result)[0];
     const allOffers = result[rootKey]?.offer || [];
     console.log('Найдено offer:', allOffers.length);
 
     const parsedOffers = allOffers
-      .map(offer => ({
-        id: offer['$']['internal-id'] || 'N/A',
-        price: parseFloat(offer.price?.[0]?.value?.[0]) || 0,
-        area: parseFloat(offer.area?.[0]?.value?.[0]) || 0,
-        rooms: parseInt(offer.rooms?.[0]) || 0,
-        floor: parseInt(offer.floor?.[0]) || 0,
-        floorsTotal: parseInt(offer['floors-total']?.[0]) || 0,
-        livingSpace: parseFloat(offer['living-space']?.[0]?.value?.[0]) || 0,
-        kitchenSpace: parseFloat(offer['kitchen-space']?.[0]?.value?.[0]) || 0,
-        builtYear: offer['built-year']?.[0] || 'N/A',
-        description: offer.description?.[0]?.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim() || '',
-        image: offer.image?.[0]?._ || ''
-      }))
+      .map(offer => {
+        const getValue = (tag) => offer[tag]?.[0] || 'N/A';
+        const getNestedValue = (parent, child) => parseFloat(offer[parent]?.[0]?.[child]?.[0]) || 0;
+        const getAttr = (attr) => offer['$'] ? offer['$'][attr] || 'N/A' : 'N/A';
+
+        let description = getValue('description');
+        description = description.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim();
+
+        return {
+          id: getAttr('internal-id'),
+          price: getNestedValue('price', 'value'),
+          area: getNestedValue('area', 'value'),
+          rooms: parseInt(getValue('rooms')) || 0,
+          floor: parseInt(getValue('floor')) || 0,
+          floorsTotal: parseInt(getValue('floors-total')) || 0,
+          livingSpace: getNestedValue('living-space', 'value'),
+          kitchenSpace: getNestedValue('kitchen-space', 'value'),
+          builtYear: getValue('built-year'),
+          description: description,
+          image: getValue('image') ? getValue('image')._ || getValue('image') : ''
+        };
+      })
       .filter(offer =>
         offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
         offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
