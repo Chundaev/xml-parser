@@ -8,7 +8,6 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-  // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -23,8 +22,9 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]);
+    console.log('Корневой элемент:', Object.keys(result)[0]);
 
+    // Динамический поиск offer в корневом элементе
     const rootKey = Object.keys(result)[0];
     const allOffers = result[rootKey]?.offer || [];
     console.log('Найдено offer:', allOffers.length);
@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
         kitchenSpace: parseFloat(offer['kitchen-space']?.[0]?.value?.[0]) || 0,
         builtYear: offer['built-year']?.[0] || 'N/A',
         description: offer.description?.[0]?.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim() || '',
-        image: offer.image?.[0]?._ || ''  // Исправление для image._ (из вашего JSON)
+        image: offer.image?.[0]?._ || ''
       }))
       .filter(offer =>
         offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
