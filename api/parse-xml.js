@@ -2,6 +2,18 @@ const fetch = require('node-fetch');
 const xml2js = require('xml2js');
 
 module.exports = async (req, res) => {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
   try {
     const { minPrice = 0, maxPrice = Infinity, minArea = 0, maxArea = Infinity, minRooms = 0, maxRooms = Infinity } = req.query;
     const response = await fetch('https://partner.unistroyrf.ru/erz/unistroyYandexNedvijMakhachkala.xml');
@@ -11,13 +23,12 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]); // Для отладки
-    
-    // Динамический поиск offer в любом корневом элементе
+    console.log('Парсинг XML завершён. Корневой элемент:', Object.keys(result)[0]);
+
     const rootKey = Object.keys(result)[0];
     const allOffers = result[rootKey]?.offer || [];
-    console.log('Найдено offer:', allOffers.length); // Для отладки
-    
+    console.log('Найдено offer:', allOffers.length);
+
     const parsedOffers = allOffers
       .map(offer => ({
         id: offer['$']['internal-id'] || 'N/A',
@@ -30,7 +41,7 @@ module.exports = async (req, res) => {
         kitchenSpace: parseFloat(offer['kitchen-space']?.[0]?.value?.[0]) || 0,
         builtYear: offer['built-year']?.[0] || 'N/A',
         description: offer.description?.[0]?.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim() || '',
-        image: offer.image?.[0] || ''
+        image: offer.image?.[0]?._ || ''  // Исправление для image._ (из вашего JSON)
       }))
       .filter(offer =>
         offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
@@ -39,7 +50,7 @@ module.exports = async (req, res) => {
       );
     res.status(200).json(parsedOffers);
   } catch (error) {
-    console.error('Ошибка в API:', error); // Для логов Vercel
+    console.error('Ошибка в API:', error);
     res.status(500).json({ error: 'Ошибка обработки XML: ' + error.message });
   }
 };
