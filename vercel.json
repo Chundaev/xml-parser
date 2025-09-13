@@ -9,6 +9,7 @@
   "routes": [
     {
       "src": "/api/parse-xml",
+      "methods": ["GET", "POST", "OPTIONS"],
       "dest": "api/parse-xml.js",
       "headers": {
         "Access-Control-Allow-Origin": "*",
