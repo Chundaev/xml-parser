@@ -1,128 +1,62 @@
 const fetch = require('node-fetch');
-const xml2js = require('xml2js');
 
 module.exports = async (req, res) => {
-  // CORS заголовки
+  // CORS — обязательно для Tilda
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
 
   try {
     const url = 'https://partner.unistroyrf.ru/erz/unistroyYandexNedvijMakhachkala.xml';
-    console.log('Запрос к XML:', url);
+    console.log('Запрашиваю XML...');
 
     const response = await fetch(url);
     if (!response.ok) {
-      console.error('Ошибка HTTP:', response.status, response.statusText);
-      return res.status(500).json({ error: `HTTP ${response.status}: ${response.statusText}` });
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    let xmlText = await response.text();
+    const xmlText = await response.text();
 
-    // ✅ УБИРАЕМ BOM (если есть)
-    if (xmlText.charCodeAt(0) === 0xFEFF) {
-      xmlText = xmlText.substring(1);
-      console.log('✅ BOM удален из XML');
-    }
+    // ✅ ИСПОЛЬЗУЕМ ПРОСТОЙ ПАРСИНГ ЧЕРЕЗ REGEXP — БЫСТРО, НАДЕЖНО, БЕЗ XML2JS
+    const priceValues = xmlText.match(/<price>\s*<value>([\d.]+)<\/value>/g) || [];
+    const areaValues = xmlText.match(/<area>\s*<value>([\d.]+)<\/value>/g) || [];
+    const roomValues = xmlText.match(/<rooms>(\d+)<\/rooms>/g) || [];
 
-    console.log('Получен XML (первые 500 символов):', xmlText.slice(0, 500));
+    const prices = priceValues.map(p => parseFloat(p.match(/<value>([\d.]+)/)[1]));
+    const areas = areaValues.map(a => parseFloat(a.match(/<value>([\d.]+)/)[1]));
+    const rooms = roomValues.map(r => parseInt(r.match(/<rooms>(\d+)/)[1]));
 
-    const parser = new xml2js.Parser({
-      explicitArray: false,
-      ignoreAttrs: false,
-      xmlns: true, // ВАЖНО: включаем поддержку xmlns
-      explicitRoot: false // Позволяет получить корневой элемент без лишнего слоя
-    });
+    // Фильтруем только положительные значения
+    const validPrices = prices.filter(p => p > 0);
+    const validAreas = areas.filter(a => a > 0);
+    const validRooms = rooms.filter(r => r >= 0);
 
-    const result = await parser.parseStringPromise(xmlText);
-
-    // ✅ Теперь ищем realty-feed — он должен быть в root
-    const rootKey = 'realty-feed';
-    if (!result[rootKey]) {
-      console.error('❌ Не найден корневой элемент "realty-feed". Структура XML:');
-      console.log(JSON.stringify(result, null, 2));
-      return res.status(500).json({ error: 'Не удалось найти <realty-feed> в XML' });
-    }
-
-    let offers = result[rootKey].offer;
-    if (!offers) {
-      console.warn('⚠️ Тег <offer> не найден внутри <realty-feed>');
-      return res.status(200).json({ apartments: [], ranges: {} });
-    }
-
-    // Если offer — один объект, а не массив — оборачиваем в массив
-    const allOffers = Array.isArray(offers) ? offers : [offers];
-
-    const parsedOffers = allOffers.map(offer => {
-      // Извлекаем значения из вложенных тегов <value>
-      const priceValue = parseFloat(offer.price?.value?.[0] || 0);
-      const areaValue = parseFloat(offer.area?.value?.[0] || 0);
-      const livingSpaceValue = parseFloat(offer['living-space']?.value?.[0] || 0);
-      const kitchenSpaceValue = parseFloat(offer['kitchen-space']?.value?.[0] || 0);
-
-      const rooms = parseInt(offer.rooms?.[0] || 0);
-      const floor = parseInt(offer.floor?.[0] || 0);
-      const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
-      const builtYear = offer['built-year']?.[0] || 'N/A';
-
-      let image = '';
-      if (offer.image) {
-        const images = Array.isArray(offer.image) ? offer.image : [offer.image];
-        image = images[0] || '';
-      }
-
-      const id = offer['$']?.['internal-id'] || 'N/A';
-      const description = offer.description?.[0] || '';
-      const locality = offer.location?.['locality-name']?.[0] || '';
-      const address = offer.location?.address?.[0] || '';
-
-      // Фильтруем только валидные предложения
-      if (priceValue <= 0 || areaValue <= 0 || rooms < 0) return null;
-
-      return {
-        id,
-        price: priceValue,
-        area: areaValue,
-        rooms,
-        floor,
-        floorsTotal,
-        livingSpace: livingSpaceValue,
-        kitchenSpace: kitchenSpaceValue,
-        builtYear,
-        description,
-        image,
-        locality,
-        address
-      };
-    }).filter(Boolean); // Убираем null
-
-    const prices = parsedOffers.map(ap => ap.price).filter(p => p > 0);
-    const areas = parsedOffers.map(ap => ap.area).filter(a => a > 0);
-    const roomsList = parsedOffers.map(ap => ap.rooms).filter(r => r >= 0);
-
-    const responseData = {
-      apartments: parsedOffers,
+    const result = {
       ranges: {
-        minPrice: prices.length ? Math.min(...prices) : null,
-        maxPrice: prices.length ? Math.max(...prices) : null,
-        minArea: areas.length ? Math.min(...areas) : null,
-        maxArea: areas.length ? Math.max(...areas) : null,
-        minRooms: roomsList.length ? Math.min(...roomsList) : null,
-        maxRooms: roomsList.length ? Math.max(...roomsList) : null
+        minPrice: validPrices.length ? Math.min(...validPrices) : 0,
+        maxPrice: validPrices.length ? Math.max(...validPrices) : 20000000,
+        minArea: validAreas.length ? Math.min(...validAreas) : 0,
+        maxArea: validAreas.length ? Math.max(...validAreas) : 300,
+        minRooms: validRooms.length ? Math.min(...validRooms) : 0,
+        maxRooms: validRooms.length ? Math.max(...validRooms) : 4
       }
     };
 
-    console.log('✅ Успешно обработано:', parsedOffers.length, 'квартир');
-    return res.status(200).json(responseData);
+    console.log('✅ Отдаем диапазоны:', result.ranges);
+    return res.status(200).json(result);
 
   } catch (error) {
-    console.error('❌ Ошибка в API:', error.stack);
-    res.status(500).json({ error: 'Ошибка обработки XML: ' + error.message });
+    console.error('❌ Ошибка:', error.message);
+    res.status(500).json({
+      error: 'Ошибка получения данных: ' + error.message,
+      ranges: {
+        minPrice: 0,
+        maxPrice: 20000000,
+        minArea: 0,
+        maxArea: 300,
+        minRooms: 0,
+        maxRooms: 4
+      }
+    });
   }
 };
