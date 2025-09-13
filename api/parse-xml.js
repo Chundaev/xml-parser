@@ -1,7 +1,6 @@
 const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
-  // CORS — обязательно для Tilda
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -11,9 +10,7 @@ module.exports = async (req, res) => {
     console.log('Запрашиваю XML...');
 
     const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
     const xmlText = await response.text();
 
@@ -49,10 +46,6 @@ module.exports = async (req, res) => {
       const builtYearMatch = offerStr.match(/<built-year>(\d{4})<\/built-year>/);
       const builtYear = builtYearMatch ? builtYearMatch[1] : 'N/A';
 
-      // Извлекаем description
-      const descMatch = offerStr.match(/<description>([\s\S]*?)<\/description>/);
-      const description = descMatch ? descMatch[1].replace(/<[^>]*>/g, '').trim() : '';
-
       // Извлекаем первое image
       const imageMatch = offerStr.match(/<image[^>]*>(.*?)<\/image>/);
       const image = imageMatch ? imageMatch[1].trim() : '';
@@ -72,6 +65,7 @@ module.exports = async (req, res) => {
       const kitchenMatch = offerStr.match(/<kitchen-space>\s*<value>([\d.]+)<\/value>/);
       const kitchenSpace = kitchenMatch ? parseFloat(kitchenMatch[1]) : 0;
 
+      // ✅ УБРАЛИ description — НЕ ВКЛЮЧАЕМ ЕГО В ОТВЕТ!
       return {
         id,
         price,
@@ -80,7 +74,6 @@ module.exports = async (req, res) => {
         floor,
         floorsTotal,
         builtYear,
-        description,
         image,
         locality,
         address,
@@ -88,24 +81,21 @@ module.exports = async (req, res) => {
         kitchenSpace
       };
     })
-    .filter(ap => ap.price > 0 && ap.area > 0 && ap.rooms >= 0); // Только валидные
+    .filter(ap => ap.price > 0 && ap.area > 0 && ap.rooms >= 0);
 
-    // 🔥 СОРТИРУЕМ: по площади ↑, затем по цене ↑
+    // Сортировка: по площади ↑, затем по цене ↑
     const sortedOffers = parsedOffers.sort((a, b) => {
-      if (a.area !== b.area) return a.area - b.area; // Сначала по площади
-      return a.price - b.price; // Если площадь одинакова — по цене
+      if (a.area !== b.area) return a.area - b.area;
+      return a.price - b.price;
     });
 
-    // Берём первые 9
-    const firstNine = sortedOffers.slice(0, 9);
-
     // Формируем диапазоны
-    const prices = parsedOffers.map(ap => ap.price).filter(p => p > 0);
-    const areas = parsedOffers.map(ap => ap.area).filter(a => a > 0);
-    const roomsList = parsedOffers.map(ap => ap.rooms).filter(r => r >= 0);
+    const prices = sortedOffers.map(ap => ap.price).filter(p => p > 0);
+    const areas = sortedOffers.map(ap => ap.area).filter(a => a > 0);
+    const roomsList = sortedOffers.map(ap => ap.rooms).filter(r => r >= 0);
 
     const result = {
-      apartments: firstNine, // ← Квартиры для карточек
+      apartments: sortedOffers, // ← Без description!
       ranges: {
         minPrice: prices.length ? Math.min(...prices) : 0,
         maxPrice: prices.length ? Math.max(...prices) : 20000000,
@@ -116,7 +106,7 @@ module.exports = async (req, res) => {
       }
     };
 
-    console.log('✅ Отдаем:', firstNine.length, 'квартир + диапазоны');
+    console.log('✅ Отдаем:', sortedOffers.length, 'квартир без description');
     return res.status(200).json(result);
 
   } catch (error) {
