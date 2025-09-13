@@ -26,62 +26,52 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     console.log('Получен XML (первые 500 символов):', xmlText.slice(0, 500));
 
-    // Настройка парсера: важно для работы с пространствами имён
     const parser = new xml2js.Parser({
-      explicitArray: false, // Не оборачивать одиночные элементы в массивы
-      ignoreAttrs: false,   // Сохранять атрибуты
-      xmlns: true           // Обрабатывать xmlns
+      explicitArray: false,
+      ignoreAttrs: false,
+      xmlns: true
     });
 
     const result = await parser.parseStringPromise(xmlText);
 
-    // Корневой ключ — всегда "realty-feed" (из xmlns)
     const rootKey = 'realty-feed';
     if (!result[rootKey]) {
       console.error('❌ Не найден корневой элемент "realty-feed"');
       return res.status(500).json({ error: 'Неверная структура XML: отсутствует realty-feed' });
     }
 
-    const offers = result[rootKey].offer;
+    let offers = result[rootKey].offer;
     if (!offers) {
-      console.warn('⚠️ offer не найдены в XML');
+      console.warn('⚠️ offer не найдены');
       return res.status(200).json({ apartments: [], ranges: {} });
     }
 
-    // Если offer — один объект, а не массив — обернём в массив
+    // Если offer — один объект, а не массив — оборачиваем в массив
     const allOffers = Array.isArray(offers) ? offers : [offers];
 
     const parsedOffers = allOffers.map(offer => {
-      // Получаем значения из вложенных тегов
       const priceValue = parseFloat(offer.price?.value?.[0] || 0);
       const areaValue = parseFloat(offer.area?.value?.[0] || 0);
       const livingSpaceValue = parseFloat(offer['living-space']?.value?.[0] || 0);
       const kitchenSpaceValue = parseFloat(offer['kitchen-space']?.value?.[0] || 0);
 
-      // Прямые теги
       const rooms = parseInt(offer.rooms?.[0] || 0);
       const floor = parseInt(offer.floor?.[0] || 0);
       const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
       const builtYear = offer['built-year']?.[0] || 'N/A';
 
-      // Локация
-      const locality = offer.location?.locality-name?.[0] || '';
-      const address = offer.location?.address?.[0] || '';
-
-      // Изображения — берем первое
       let image = '';
       if (offer.image) {
         const images = Array.isArray(offer.image) ? offer.image : [offer.image];
         image = images[0] || '';
       }
 
-      // ID из атрибута
       const id = offer['$']?.['internal-id'] || 'N/A';
-
-      // Описание
       const description = offer.description?.[0] || '';
+      const locality = offer.location?.locality-name?.[0] || '';
+      const address = offer.location?.address?.[0] || '';
 
-      // Фильтруем только реальные квартиры
+      // Фильтруем некорректные предложения
       if (priceValue <= 0 || areaValue <= 0 || rooms < 0) return null;
 
       return {
@@ -101,7 +91,6 @@ module.exports = async (req, res) => {
       };
     }).filter(Boolean); // Убираем null
 
-    // Рассчитываем диапазоны
     const prices = parsedOffers.map(ap => ap.price).filter(p => p > 0);
     const areas = parsedOffers.map(ap => ap.area).filter(a => a > 0);
     const roomsList = parsedOffers.map(ap => ap.rooms).filter(r => r >= 0);
