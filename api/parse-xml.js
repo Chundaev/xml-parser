@@ -22,38 +22,33 @@ module.exports = async (req, res) => {
     const xmlText = await response.text();
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(xmlText);
-    console.log('Корневой элемент:', Object.keys(result)[0]);
 
     const rootKey = Object.keys(result)[0];
     const allOffers = result[rootKey]?.offer || [];
-    console.log('Найдено offer:', allOffers.length);
 
     const parsedOffers = allOffers
       .map(offer => {
-        // Парсинг прямых тегов (rooms, floor, floors-total, built-year, description)
+        // Парсинг данных (адаптируйте под структуру вашего XML)
         const rooms = parseInt(offer.rooms?.[0] || 0);
         const floor = parseInt(offer.floor?.[0] || 0);
         const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
         const builtYear = offer['built-year']?.[0] || 'N/A';
         let description = offer.description?.[0] || '';
-        description = description.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim();
+        
+        // Важно: проверьте структуру вашего XML!
+        const priceValue = offer.price?.[0] || 0; // Прямое значение
+        const areaValue = offer.area?.[0] || 0; // Прямое значение
+        const livingSpaceValue = offer['living-space']?.[0] || 0;
+        const kitchenSpaceValue = offer['kitchen-space']?.[0] || 0;
 
-        // Парсинг вложенных тегов (price, area, living-space, kitchen-space)
-        const priceValue = offer.price?.[0]?.value?.[0] || 0;
-        const areaValue = offer.area?.[0]?.value?.[0] || 0;
-        const livingSpaceValue = offer['living-space']?.[0]?.value?.[0] || 0;
-        const kitchenSpaceValue = offer['kitchen-space']?.[0]?.value?.[0] || 0;
-
-        // Парсинг изображений (массив, берём первый с _ для текста внутри тега)
+        // Парсинг изображений
         let image = '';
         const images = offer.image || [];
         if (images.length > 0) {
-          image = images[0]._; // Текст внутри <image>
+          image = typeof images[0] === 'string' ? images[0] : images[0]._;
         }
 
         const id = offer['$']['internal-id'] || 'N/A';
-
-        console.log('Парсинг offer:', id, 'rooms:', rooms, 'price:', priceValue, 'area:', areaValue);
 
         return {
           id: id,
@@ -71,13 +66,34 @@ module.exports = async (req, res) => {
       })
       .filter(offer => {
         const validOffer = offer.price > 0 && offer.area > 0 && offer.rooms >= 0;
-        if (!validOffer) console.log('Отфильтрован offer с нулевыми значениями:', offer.id);
         return validOffer &&
           offer.price >= parseFloat(minPrice) && offer.price <= parseFloat(maxPrice) &&
           offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
           offer.rooms >= parseInt(minRooms) && offer.rooms <= parseInt(maxRooms);
       });
-    console.log('После фильтрации:', parsedOffers.length);
+
+    // Если запрос без параметров - возвращаем все данные + информацию о диапазонах
+    if (Object.keys(req.query).length === 0) {
+      const prices = parsedOffers.map(ap => ap.price).filter(p => p > 0);
+      const areas = parsedOffers.map(ap => ap.area).filter(a => a > 0);
+      const rooms = parsedOffers.map(ap => ap.rooms).filter(r => r >= 0);
+      
+      const responseData = {
+        apartments: parsedOffers,
+        ranges: {
+          minPrice: Math.min(...prices),
+          maxPrice: Math.max(...prices),
+          minArea: Math.min(...areas),
+          maxArea: Math.max(...areas),
+          minRooms: Math.min(...rooms),
+          maxRooms: Math.max(...rooms)
+        }
+      };
+      
+      return res.status(200).json(responseData);
+    }
+
+    // Если есть параметры фильтрации - возвращаем только отфильтрованные данные
     res.status(200).json(parsedOffers);
   } catch (error) {
     console.error('Ошибка в API:', error);
