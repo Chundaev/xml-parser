@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
 
     const parsedOffers = allOffers
       .map(offer => {
-        // Парсинг прямых тегов (исправлено!)
+        // Парсинг прямых тегов (rooms, floor, floors-total, built-year)
         const rooms = parseInt(offer.rooms?.[0] || 0);
         const floor = parseInt(offer.floor?.[0] || 0);
         const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
@@ -38,17 +38,17 @@ module.exports = async (req, res) => {
         let description = offer.description?.[0] || '';
         description = description.replace(/ЖК\s*«Grand\s*Bereg».*?(Республика\s*Дагестан,\s*Махачкала,\s*в\s*районе\s*Ипподрома\s*,)/gis, '').trim();
 
-        // Парсинг цен и площадей (ИСПРАВЛЕНО!)
-        const priceValue = offer.price?.[0] || 0; // Прямое значение
-        const areaValue = offer.area?.[0] || 0; // Прямое значение
-        const livingSpaceValue = offer['living-space']?.[0] || 0; // Прямое значение
-        const kitchenSpaceValue = offer['kitchen-space']?.[0] || 0; // Прямое значение
+        // Парсинг вложенных тегов (price, area, living-space, kitchen-space)
+        const priceValue = offer.price?.[0]?.value?.[0] || 0;
+        const areaValue = offer.area?.[0]?.value?.[0] || 0;
+        const livingSpaceValue = offer['living-space']?.[0]?.value?.[0] || 0;
+        const kitchenSpaceValue = offer['kitchen-space']?.[0]?.value?.[0] || 0;
 
-        // Парсинг изображений (ИСПРАВЛЕНО!)
+        // Парсинг изображений (массив, берём первый с _ для текста)
         let image = '';
         const images = offer.image || [];
         if (images.length > 0) {
-          image = typeof images[0] === 'string' ? images[0] : images[0]._;
+          image = images[0]._; // Текст внутри тега <image>
         }
 
         const id = offer['$']['internal-id'] || 'N/A';
@@ -77,7 +77,6 @@ module.exports = async (req, res) => {
           offer.area >= parseFloat(minArea) && offer.area <= parseFloat(maxArea) &&
           offer.rooms >= parseInt(minRooms) && offer.rooms <= parseInt(maxRooms);
       });
-    
     console.log('После фильтрации:', parsedOffers.length);
     res.status(200).json(parsedOffers);
   } catch (error) {
