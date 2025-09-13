@@ -23,26 +23,36 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: `HTTP ${response.status}: ${response.statusText}` });
     }
 
-    const xmlText = await response.text();
+    let xmlText = await response.text();
+
+    // ✅ УБИРАЕМ BOM (если есть)
+    if (xmlText.charCodeAt(0) === 0xFEFF) {
+      xmlText = xmlText.substring(1);
+      console.log('✅ BOM удален из XML');
+    }
+
     console.log('Получен XML (первые 500 символов):', xmlText.slice(0, 500));
 
     const parser = new xml2js.Parser({
       explicitArray: false,
       ignoreAttrs: false,
-      xmlns: true
+      xmlns: true, // ВАЖНО: включаем поддержку xmlns
+      explicitRoot: false // Позволяет получить корневой элемент без лишнего слоя
     });
 
     const result = await parser.parseStringPromise(xmlText);
 
+    // ✅ Теперь ищем realty-feed — он должен быть в root
     const rootKey = 'realty-feed';
     if (!result[rootKey]) {
-      console.error('❌ Не найден корневой элемент "realty-feed"');
-      return res.status(500).json({ error: 'Неверная структура XML: отсутствует realty-feed' });
+      console.error('❌ Не найден корневой элемент "realty-feed". Структура XML:');
+      console.log(JSON.stringify(result, null, 2));
+      return res.status(500).json({ error: 'Не удалось найти <realty-feed> в XML' });
     }
 
     let offers = result[rootKey].offer;
     if (!offers) {
-      console.warn('⚠️ offer не найдены');
+      console.warn('⚠️ Тег <offer> не найден внутри <realty-feed>');
       return res.status(200).json({ apartments: [], ranges: {} });
     }
 
@@ -50,6 +60,7 @@ module.exports = async (req, res) => {
     const allOffers = Array.isArray(offers) ? offers : [offers];
 
     const parsedOffers = allOffers.map(offer => {
+      // Извлекаем значения из вложенных тегов <value>
       const priceValue = parseFloat(offer.price?.value?.[0] || 0);
       const areaValue = parseFloat(offer.area?.value?.[0] || 0);
       const livingSpaceValue = parseFloat(offer['living-space']?.value?.[0] || 0);
@@ -68,10 +79,10 @@ module.exports = async (req, res) => {
 
       const id = offer['$']?.['internal-id'] || 'N/A';
       const description = offer.description?.[0] || '';
-      const locality = offer.location?.['locality-name']?.[0] || ''; // ✅ ИСПРАВЛЕНО!
+      const locality = offer.location?.['locality-name']?.[0] || '';
       const address = offer.location?.address?.[0] || '';
 
-      // Фильтруем некорректные предложения
+      // Фильтруем только валидные предложения
       if (priceValue <= 0 || areaValue <= 0 || rooms < 0) return null;
 
       return {
