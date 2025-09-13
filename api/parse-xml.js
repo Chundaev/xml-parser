@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
 
     const parsedOffers = allOffers
       .map(offer => {
-        // Парсинг прямых тегов (rooms, floor, floors-total, built-year)
+        // Парсинг прямых тегов (rooms, floor, floors-total, built-year, description)
         const rooms = parseInt(offer.rooms?.[0] || 0);
         const floor = parseInt(offer.floor?.[0] || 0);
         const floorsTotal = parseInt(offer['floors-total']?.[0] || 0);
@@ -44,11 +44,11 @@ module.exports = async (req, res) => {
         const livingSpaceValue = offer['living-space']?.[0]?.value?.[0] || 0;
         const kitchenSpaceValue = offer['kitchen-space']?.[0]?.value?.[0] || 0;
 
-        // Парсинг изображений (массив, берём первый с _ для текста)
+        // Парсинг изображений (массив, берём первый с _ для текста внутри тега)
         let image = '';
         const images = offer.image || [];
         if (images.length > 0) {
-          image = images[0]._; // Текст внутри тега <image>
+          image = images[0]._; // Текст внутри <image>
         }
 
         const id = offer['$']['internal-id'] || 'N/A';
