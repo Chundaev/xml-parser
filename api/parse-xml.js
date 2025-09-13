@@ -68,7 +68,7 @@ module.exports = async (req, res) => {
 
       const id = offer['$']?.['internal-id'] || 'N/A';
       const description = offer.description?.[0] || '';
-      const locality = offer.location?.locality-name?.[0] || '';
+      const locality = offer.location?.['locality-name']?.[0] || ''; // ✅ ИСПРАВЛЕНО!
       const address = offer.location?.address?.[0] || '';
 
       // Фильтруем некорректные предложения
