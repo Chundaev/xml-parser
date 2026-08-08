@@ -69,6 +69,16 @@ module.exports = async (req, res) => {
       const builtYearMatch = offerStr.match(/<built-year>(\d{4})<\/built-year>/);
       const builtYear = builtYearMatch ? builtYearMatch[1] : 'N/A';
 
+      // ready-quarter (квартал сдачи: 1-4)
+      const readyQuarterMatch = offerStr.match(/<ready-quarter>(\d)<\/ready-quarter>/);
+      const readyQuarter = readyQuarterMatch ? parseInt(readyQuarterMatch[1]) : 0;
+
+      // Номер квартиры. В фиде отдельного тега нет — застройщик прячет его
+      // в самом конце <description>: "...проспект Насрутдинова , 158 кв.10"
+      // Совпадает с номером на сайте застройщика (№ 10, № 82 и т.д.).
+      const aptNumMatch = offerStr.match(/кв\.(\d+)\s*<\/description>/);
+      const apartmentNumber = aptNumMatch ? parseInt(aptNumMatch[1]) : 0;
+
       // первое image
       const imageMatch = offerStr.match(/<image[^>]*>(.*?)<\/image>/);
       const image = imageMatch ? imageMatch[1].trim() : '';
@@ -98,6 +108,8 @@ module.exports = async (req, res) => {
         floor,
         floorsTotal,
         builtYear,
+        readyQuarter,
+        apartmentNumber,
         image,
         locality,
         address,
